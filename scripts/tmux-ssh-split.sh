@@ -375,15 +375,15 @@ extract_path_from_ps1() {
   local match
 
   # Search for zsh hash dirs (eg: ~zsh/bin)
-  if match=$(grep -m 1 -oP '~[^\s]+' <<< "$line")
+  # bash/zsh prompt characters: `\$%#`; End of string: `$`
+  # shellcheck disable=SC2088
+  if match=$(grep -m 1 -oP '~[^\s\$%#$]*' <<< "$line")
   then
-    if [[ "$match" == '~' || "$match" == '~/' ]]
-    then
-      echo "Current dir seems to be '~', ignoring since it probably the default anyway" >&2
-      return
-    fi
-    # Remove trailing $ or # (bash prompt char)
-    sed 's/[$#]$//' <<< "${match}"
+    # cd ~/'dir' will trigger the needed tilde expansion but these won't:
+    # cd '~/dir' or cd ~'/dir' .. so only the second part is being escaped
+    IFS=/ read tilde_pre the_rest <<<"${match:1}"
+    # shellcheck disable=SC2086
+    sh -c 'cd ~'${tilde_pre}/"${the_rest} && pwd" 2>/dev/null
     return
   fi
 
@@ -392,9 +392,9 @@ extract_path_from_ps1() {
   then
     # Add leading slash if missing
     [[ ! $match = /* ]] && match="/$match"
-    # Remove trailing $ or # (bash prompt char)
+    # Remove trailing $, %, or # (bash/zsh prompt chars)
     # Remove quotes (eg: ' or ")
-    sed -e 's/[$#]$//' -e "s#['\"]*##g" <<< "${match}"
+    sed -e 's/[$%#]$//' -e "s#['\"]*##g" <<< "${match}"
     return
   fi
 
